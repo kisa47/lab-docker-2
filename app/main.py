@@ -2,6 +2,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
 import redis, psycopg2, os, socket
+import time
 app = FastAPI()
 
 INSTANCE_ID = socket.gethostname()
@@ -37,18 +38,30 @@ def get_db_connection():
         password=DB_PASS
     )
 
+
 @app.on_event("startup")
 def on_startup():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS items (id SERIAL PRIMARY KEY, name TEXT);")
-    # Добавляем тестовые данные только если таблица пуста
-    cur.execute("SELECT COUNT(*) FROM items;")
-    if cur.fetchone()[0] == 0:
-        cur.execute("INSERT INTO items (name) VALUES ('Кофе'), ('Чай');")
-    conn.commit()
-    cur.close()
-    conn.close()
+    retriyes=0
+    while True:
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS items (id SERIAL PRIMARY KEY, name TEXT);")
+            # Добавляем тестовые данные только если таблица пуста
+            cur.execute("SELECT COUNT(*) FROM items;")
+            if cur.fetchone()[0] == 0:
+                cur.execute("INSERT INTO items (name) VALUES ('Кофе'), ('Чай');")
+            conn.commit()
+            cur.close()
+            conn.close()
+            break
+        except:
+            retriyes += 1
+            if retriyes > 5:
+                raise
+            else:
+                time.sleep(10)
+    
 
 # --- ЧТЕНИЕ (с кешем) ---
 @app.get("/items", response_model=list[ItemResponse])
